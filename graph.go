@@ -247,6 +247,9 @@ func (c *context) scanMap(obj *object) uintptr {
 
 func (c *context) scanInterface(obj *object) uintptr {
 	elem := obj.v.Elem()
+	if !elem.IsValid() {
+		return 0 // nil interface
+	}
 	c.scan(invalidAddr, elem, false)
 	if !c.tc.isPointer(elem.Type()) {
 		// Account for non-pointer size of the value.

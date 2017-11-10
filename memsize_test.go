@@ -155,11 +155,13 @@ func TestTotal(t *testing.T) {
 		},
 		{
 			name: "interface",
-			v: &[2]interface{}{
-				uint64(0),
-				&struct16{},
-			},
+			v:    &[2]interface{}{uint64(0), &struct16{}},
 			want: 2*sizeofInterface + 8 + 16,
+		},
+		{
+			name: "interface_nil",
+			v:    &[2]interface{}{nil, nil},
+			want: 2 * sizeofInterface,
 		},
 	}
 	for _, test := range tests {
