@@ -1,7 +1,10 @@
 package memsize
 
 import (
+	"fmt"
+	"sort"
 	"testing"
+	"testing/quick"
 )
 
 func TestSliceTree(t *testing.T) {
@@ -43,4 +46,67 @@ func TestSliceTreeOverlap(t *testing.T) {
 			t.Errorf("overlap tree contains addr %#x, but shouldn't", addr)
 		}
 	}
+}
+
+// This test adds random arrays into the tree and checks whether tree elements are sorted
+// and non-overlapping after each insert.
+func TestSliceTreeSorted(t *testing.T) {
+	const maxUintptr = ^uintptr(0)
+	type slice struct {
+		Start, Len uintptr
+	}
+
+	check := func(input []slice) bool {
+		var st sliceTree
+		for _, s := range input {
+			if s.Len > maxUintptr-s.Start {
+				// Avoid overflow.
+				s.Len = maxUintptr - s.Start
+			}
+			e := fmt.Sprintf("{start:%#x, len:%#x}", s.Start, s.Len)
+			pre := st.String()
+			overlap := st.insert(s.Start, s.Len)
+			sorted, disjoint := checkTreeSorted(st)
+			if !sorted {
+				t.Logf("not sorted after inserting %s into %s", e, pre)
+				return false
+			}
+			if !disjoint {
+				t.Logf("st.arrays not disjoint after inserting %s into %s", e, pre)
+				return false
+			}
+			overlapSorted, overlapDisjoint := checkTreeSorted(overlap)
+			if !overlapSorted {
+				t.Logf("overlap tree %v not sorted after inserting %s into %s", overlap, e, pre)
+				return false
+			}
+			if !overlapDisjoint {
+				t.Logf("overlap tree %v not disjoint after inserting %s into %s", overlap, e, pre)
+				return false
+			}
+		}
+		return true
+	}
+
+	if err := quick.Check(check, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func checkTreeSorted(st sliceTree) (bool, bool) {
+	sorted := sort.SliceIsSorted(st.arrays, func(i, j int) bool {
+		return st.arrays[i].start < st.arrays[j].start
+	})
+	disjoint := true
+	if len(st.arrays) > 0 {
+		prev := st.arrays[0]
+		for _, a := range st.arrays[1:] {
+			if a.overlaps(prev) {
+				disjoint = false
+				break
+			}
+			prev = a
+		}
+	}
+	return sorted, disjoint
 }
