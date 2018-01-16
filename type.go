@@ -5,6 +5,14 @@ import (
 	"reflect"
 )
 
+// address is a memory location.
+//
+// Code dealing with uintptr is oblivious to the zero address.
+// Code dealing with address is not: it treats the zero address
+// as invalid. Offsetting an invalid address doesn't do anything.
+//
+// This distinction is useful because there are objects that we can't
+// get the pointer to.
 type address uintptr
 
 const invalidAddr = address(0)
@@ -18,6 +26,10 @@ func (a address) addOffset(off uintptr) address {
 		return invalidAddr
 	}
 	return a + address(off)
+}
+
+func (a address) String() string {
+	return fmt.Sprintf("%#x", uintptr(a))
 }
 
 type typCache map[reflect.Type]typInfo
