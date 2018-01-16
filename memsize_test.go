@@ -147,11 +147,32 @@ func TestTotal(t *testing.T) {
 		},
 		{
 			name: "slices_overlap",
-			v: func() *[4][]byte {
-				backarray := [32]byte{}
-				return &[4][]byte{backarray[2:4], backarray[10:12], backarray[20:25], backarray[:]}
+			v: func() *[4][]uint16 {
+				backarray := [32]uint16{}
+				return &[4][]uint16{
+					backarray[2:4],
+					backarray[10:12],
+					backarray[20:25],
+					backarray[:],
+				}
 			}(),
-			want: 4*sizeofSlice + 32,
+			want: 4*sizeofSlice + 32*2,
+		},
+		{
+			name: "slices_overlap_array",
+			v: func() *struct {
+				a [32]byte
+				s [2][]byte
+			} {
+				v := struct {
+					a [32]byte
+					s [2][]byte
+				}{}
+				v.s[0] = v.a[2:4]
+				v.s[1] = v.a[5:8]
+				return &v
+			}(),
+			want: 32 + 2*sizeofSlice,
 		},
 		{
 			name: "interface",
@@ -171,6 +192,7 @@ func TestTotal(t *testing.T) {
 			rs.Add("test", test.v)
 			size := rs.Scan()
 			if size.Total() != test.want {
+				t.Log(size.Report())
 				t.Fatalf("total=%d, want %d", size.Total(), test.want)
 			}
 		})

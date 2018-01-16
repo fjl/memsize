@@ -19,7 +19,7 @@ func (ba backarray) contains(addr uintptr) bool {
 }
 
 func (ba backarray) overlaps(other backarray) bool {
-	return ba.start < other.end && ba.end >= other.start
+	return ba.start <= other.end && ba.end >= other.start
 }
 
 func (ba backarray) String() string {
@@ -46,6 +46,10 @@ func (st *sliceTree) contains(addr address) bool {
 // insert adds a slice. It returns a tree containing all previous arrays
 // overlapped by the new one.
 func (st *sliceTree) insert(start, length uintptr) sliceTree {
+	if length == 0 {
+		return sliceTree{}
+	}
+
 	newarray := backarray{start: start, end: start + length}
 	i := st.findarray(start)
 	if i >= len(st.arrays) {
@@ -68,7 +72,6 @@ func (st *sliceTree) insert(start, length uintptr) sliceTree {
 	merged := sliceTree{arrays: make([]backarray, mend-mstart)}
 	copy(merged.arrays, st.arrays[mstart:mend])
 	st.arrays = append(st.arrays[:mstart], append([]backarray{newarray}, st.arrays[mend:]...)...)
-	// fmt.Printf("merged indexes %d:%d (len %d, newlen %d): %v %v\n", mstart, mend, len(merged.arrays), len(st.arrays), newarray, merged)
 	return merged
 }
 

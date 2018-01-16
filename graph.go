@@ -183,19 +183,6 @@ func (c *context) scanContent(addr address, obj *object) uintptr {
 	}
 }
 
-func (c *context) scanArray(base address, obj *object) uintptr {
-	var (
-		etyp  = obj.v.Type().Elem()
-		esize = etyp.Size()
-		extra = uintptr(0)
-	)
-	for i := 0; i < obj.v.Len(); i++ {
-		base = base.addOffset(esize)
-		extra += c.scan(base, obj.v.Index(i), false)
-	}
-	return extra
-}
-
 func (c *context) scanChan(obj *object) uintptr {
 	etyp := obj.v.Type().Elem()
 	return uintptr(obj.v.Cap()) * etyp.Size()
@@ -210,26 +197,37 @@ func (c *context) scanStruct(base address, obj *object) uintptr {
 	return extra
 }
 
+func (c *context) scanArray(addr address, obj *object) uintptr {
+	_, extra := c.scanArrayMem(addr, obj)
+	return extra
+}
+
 func (c *context) scanSlice(obj *object) uintptr {
+	count, extra := c.scanArrayMem(address(obj.v.Pointer()), obj)
+	return extra + uintptr(count)*obj.v.Type().Elem().Size()
+}
+
+func (c *context) scanArrayMem(addr address, obj *object) (count int, extra uintptr) {
 	var (
-		esize = obj.v.Type().Elem().Size()
-		slice = obj.v.Slice(0, obj.v.Cap())
-		base  = obj.v.Pointer()
-		extra = uintptr(0)
+		esize   = obj.v.Type().Elem().Size()
+		slice   = obj.v.Slice(0, obj.v.Cap())
+		overlap sliceTree
 	)
 	// Check whether the backing array is already tracked. If it is, scan only the
 	// previously unscanned portion of the array to avoid counting overlapping slices
 	// more than once.
-	overlap := c.backarrays.insert(base, uintptr(obj.v.Cap()))
-	addr := address(base)
+	if addr.valid() {
+		size := uintptr(obj.v.Cap()) * esize
+		overlap = c.backarrays.insert(uintptr(addr), size)
+	}
 	for i := 0; i < slice.Len(); i++ {
 		if !overlap.contains(addr) {
 			extra += c.scan(addr, slice.Index(i), false)
-			extra += esize
+			count++
 		}
 		addr = addr.addOffset(esize)
 	}
-	return extra
+	return count, extra
 }
 
 func (c *context) scanMap(obj *object) uintptr {

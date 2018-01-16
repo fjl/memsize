@@ -57,16 +57,9 @@ func (tc *typCache) info(typ reflect.Type) typInfo {
 }
 
 func (tc *typCache) makeInfo(typ reflect.Type) typInfo {
-	var ti typInfo
-	ti.isPointer = isPointer(typ)
-	ti.needScan = ti.isPointer
 	k := typ.Kind()
-	if k == reflect.Array {
-		ti.needScan = tc.needScan(typ.Elem())
-	} else if k >= reflect.Chan && k <= reflect.Struct {
-		ti.needScan = true
-	}
-	return ti
+	p := isPointer(typ)
+	return typInfo{isPointer: p, needScan: p || k >= reflect.Array && k <= reflect.Struct}
 }
 
 func isPointer(typ reflect.Type) bool {
