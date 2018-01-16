@@ -110,7 +110,7 @@ type context struct {
 	tc         typCache
 	s          *Sizes
 	curRoot    string
-	backarrays sliceTree
+	backarrays memSpans
 }
 
 type object struct {
@@ -211,7 +211,7 @@ func (c *context) scanArrayMem(addr address, obj *object) (count int, extra uint
 	var (
 		esize   = obj.v.Type().Elem().Size()
 		slice   = obj.v.Slice(0, obj.v.Cap())
-		overlap sliceTree
+		overlap memSpans
 	)
 	// Check whether the backing array is already tracked. If it is, scan only the
 	// previously unscanned portion of the array to avoid counting overlapping slices

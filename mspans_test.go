@@ -10,31 +10,31 @@ import (
 	"testing/quick"
 )
 
-func TestSliceTree(t *testing.T) {
-	var st sliceTree
-	st.insert(0x1, 2)
-	st.insert(0x3, 5)
-	st.insert(0x1, 3)
-	st.insert(0x1, 4)
-	t.Log("tree:", st)
+func TestMemSpans(t *testing.T) {
+	var sp memSpans
+	sp.insert(0x1, 2)
+	sp.insert(0x3, 5)
+	sp.insert(0x1, 3)
+	sp.insert(0x1, 4)
+	t.Log("tree:", sp)
 
-	if len(st.arrays) != 1 {
-		t.Error("want one array, have", len(st.arrays))
+	if len(sp.spans) != 1 {
+		t.Error("want one span, have", len(sp.spans))
 	}
 	want := []address{0x5}
 	for _, addr := range want {
-		if !st.contains(addr) {
+		if !sp.contains(addr) {
 			t.Errorf("tree doesn't contain addr %v", addr)
 		}
 	}
 }
 
-func TestSliceTreeOverlap(t *testing.T) {
-	var st sliceTree
-	st.insert(0x10, 16)
-	st.insert(0x30, 16)
-	overlap := st.insert(0x5, 256)
-	t.Log("tree:", st)
+func TestMemSpansTreeOverlap(t *testing.T) {
+	var sp memSpans
+	sp.insert(0x10, 16)
+	sp.insert(0x30, 16)
+	overlap := sp.insert(0x5, 256)
+	t.Log("tree:", sp)
 	t.Log("overlap:", overlap)
 
 	want := []address{0x10, 0x11, 0x30, 0x31}
@@ -51,33 +51,33 @@ func TestSliceTreeOverlap(t *testing.T) {
 	}
 }
 
-type testSlice struct {
+type testSpan struct {
 	start, len uintptr
 }
 
 const maxUintptr = ^uintptr(0)
 
-func (testSlice) Generate(rand *rand.Rand, size int) reflect.Value {
-	var s testSlice
+func (testSpan) Generate(rand *rand.Rand, size int) reflect.Value {
+	var s testSpan
 	s.start = uintptr(rand.Intn(size))
 	limit := maxUintptr - s.start
 	s.len = uintptr(rand.Intn(size)) % limit
 	return reflect.ValueOf(s)
 }
 
-func (s testSlice) String() string {
+func (s testSpan) String() string {
 	return fmt.Sprintf("{start: %#x, len: %#x}", s.start, s.len)
 }
 
-// This test adds random arrays into the tree and checks whether tree elements are sorted
+// This test adds random spans and checks whether the elements are sorted
 // and non-overlapping after each insert.
-func TestSliceTreeSorted(t *testing.T) {
-	check := func(input []testSlice) bool {
-		var st sliceTree
+func TestMemSpansSorted(t *testing.T) {
+	check := func(input []testSpan) bool {
+		var sp memSpans
 		for _, s := range input {
-			pre := st.String()
-			overlap := st.insert(s.start, s.len)
-			if err := st.checkConsistency(); err != nil {
+			pre := sp.String()
+			overlap := sp.insert(s.start, s.len)
+			if err := sp.checkConsistency(); err != nil {
 				t.Logf("%v after inserting %v into %s", err, s, pre)
 				return false
 			}
@@ -94,17 +94,17 @@ func TestSliceTreeSorted(t *testing.T) {
 	}
 }
 
-func (st sliceTree) checkConsistency() error {
-	sorted := sort.SliceIsSorted(st.arrays, func(i, j int) bool {
-		return st.arrays[i].start < st.arrays[j].start
+func (sp memSpans) checkConsistency() error {
+	sorted := sort.SliceIsSorted(sp.spans, func(i, j int) bool {
+		return sp.spans[i].start < sp.spans[j].start
 	})
 	if !sorted {
 		return errors.New("not sorted")
 	}
 	disjoint := true
-	if len(st.arrays) > 0 {
-		prev := st.arrays[0]
-		for _, a := range st.arrays[1:] {
+	if len(sp.spans) > 0 {
+		prev := sp.spans[0]
+		for _, a := range sp.spans[1:] {
 			if a.overlaps(prev) {
 				disjoint = false
 				break
