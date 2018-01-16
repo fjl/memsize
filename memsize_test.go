@@ -192,8 +192,9 @@ func TestTotal(t *testing.T) {
 			rs.Add("test", test.v)
 			size := rs.Scan()
 			if size.Total() != test.want {
-				t.Log(size.Report())
-				t.Fatalf("total=%d, want %d", size.Total(), test.want)
+				t.Errorf("total=%d, want %d", size.Total(), test.want)
+				t.Logf("\n%s", size.Report())
+
 			}
 		})
 	}
