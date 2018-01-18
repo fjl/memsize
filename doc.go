@@ -18,12 +18,6 @@ You can traverse the graph to get all the objects and their respective sizes:
 memsize can handle cycles just fine and tracks both private and public struct fields.
 There are a few limitations though:
 
-Races during scan
-
-Scanning your objects while they are being modified is racy. There is no solution
-to this at the moment, but you can work around it by synchronizing your goroutines
-around the call to Scan.
-
 Channel buffers cannot be scanned
 
 There is no way to get the content of a channel buffer without reading from the channel.

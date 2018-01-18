@@ -27,6 +27,9 @@ func (g *RootSet) Add(name string, obj interface{}) {
 // Scan traverses all objects reachable from the current roots and counts how much memory
 // is used per-type and per-root.
 func (g *RootSet) Scan() Sizes {
+	stopTheWorld("memsize scan")
+	defer startTheWorld()
+
 	ctx := newContext()
 	for name, root := range g.roots {
 		ctx.curRoot = name
