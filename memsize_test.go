@@ -31,6 +31,9 @@ type (
 	structstring struct {
 		s string
 	}
+	structloop struct {
+		s *structloop
+	}
 	array64 [64]byte
 )
 
@@ -73,6 +76,15 @@ func TestTotal(t *testing.T) {
 			name: "structslice",
 			v:    &structslice{s: []uint32{1, 2, 3}},
 			want: sizeofSlice + 3*4,
+		},
+		{
+			name: "structloop",
+			v: func() *structloop {
+				v := new(structloop)
+				v.s = v
+				return v
+			}(),
+			want: 64,
 		},
 		{
 			name: "array64",
