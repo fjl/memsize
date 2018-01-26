@@ -7,10 +7,12 @@ import (
 )
 
 func main() {
-	data := make([]byte, 200)
+	byteslice := make([]byte, 200)
+	intslice := make([]int, 100)
 
 	h := new(memsizeui.Handler)
 	s := &http.Server{Addr: ":8080", Handler: h}
-	h.Add("", &data)
+	h.Add("byteslice", &byteslice)
+	h.Add("intslice", &intslice)
 	s.ListenAndServe()
 }
