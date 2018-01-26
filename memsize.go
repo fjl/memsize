@@ -225,26 +225,26 @@ func (c *context) scanStruct(base address, obj *object) uintptr {
 }
 
 func (c *context) scanArray(addr address, obj *object) uintptr {
-	_, extra := c.scanArrayMem(addr, obj)
+	_, extra := c.scanArrayMem(addr, obj.v)
 	return extra
 }
 
 func (c *context) scanSlice(obj *object) uintptr {
-	count, extra := c.scanArrayMem(address(obj.v.Pointer()), obj)
+	slice := obj.v.Slice(0, obj.v.Cap())
+	count, extra := c.scanArrayMem(address(obj.v.Pointer()), slice)
 	return extra + uintptr(count)*obj.v.Type().Elem().Size()
 }
 
-func (c *context) scanArrayMem(addr address, obj *object) (count int, extra uintptr) {
+func (c *context) scanArrayMem(addr address, slice reflect.Value) (count int, extra uintptr) {
 	var (
-		esize   = obj.v.Type().Elem().Size()
-		slice   = obj.v.Slice(0, obj.v.Cap())
+		esize   = slice.Type().Elem().Size()
 		overlap memSpans
 	)
 	// Check whether the backing array is already tracked. If it is, scan only the
 	// previously unscanned portion of the array to avoid counting overlapping slices
 	// more than once.
 	if addr.valid() {
-		size := uintptr(obj.v.Cap()) * esize
+		size := uintptr(slice.Cap()) * esize
 		overlap = c.backarrays.insert(uintptr(addr), size)
 	}
 	for i := 0; i < slice.Len(); i++ {

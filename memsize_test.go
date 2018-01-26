@@ -74,6 +74,16 @@ func TestTotal(t *testing.T) {
 			want: 64,
 		},
 		{
+			name: "array_unadressable",
+			v: func() *map[[3]uint64]struct{} {
+				v := map[[3]uint64]struct{}{
+					{1, 2, 3}: struct{}{},
+				}
+				return &v
+			}(),
+			want: sizeofMap + 3*8,
+		},
+		{
 			name: "structslice",
 			v:    &structslice{s: []uint32{1, 2, 3}},
 			want: sizeofSlice + 3*4,
