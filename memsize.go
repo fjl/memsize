@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// RootSet holds roots to scan.
 type RootSet struct {
 	roots map[string]reflect.Value
 }
@@ -24,14 +25,37 @@ func (g *RootSet) Add(name string, obj interface{}) {
 	g.roots[name] = rv
 }
 
+// Roots returns all registered root names.
+func (g *RootSet) Roots() []string {
+	names := make([]string, 0, len(g.roots))
+	for name := range g.roots {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Scan traverses all objects reachable from the current roots and counts how much memory
 // is used per-type and per-root.
 func (g *RootSet) Scan() Sizes {
+	return g.scan(g.roots)
+}
+
+// ScanRoot scans a single root.
+func (g *RootSet) ScanRoot(name string) Sizes {
+	singleRoot := map[string]reflect.Value{name: g.roots[name]}
+	if _, ok := g.roots[name]; !ok {
+		panic("memsize: ScanRoot called with unregistered root name")
+	}
+	return g.scan(singleRoot)
+}
+
+func (g *RootSet) scan(roots map[string]reflect.Value) Sizes {
 	stopTheWorld("memsize scan")
 	defer startTheWorld()
 
 	ctx := newContext()
-	for name, root := range g.roots {
+	for name, root := range roots {
 		ctx.curRoot = name
 		ctx.scan(invalidAddr, root, false)
 	}
