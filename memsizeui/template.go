@@ -1,6 +1,9 @@
 package memsizeui
 
-import "html/template"
+import (
+	"html/template"
+	"strconv"
+)
 
 var templateBase = template.Must(template.New("base").Parse(`<!DOCTYPE html>
 <html>
@@ -18,18 +21,23 @@ var templateBase = template.Must(template.New("base").Parse(`<!DOCTYPE html>
 			 text-decoration: none;
 			 font-size: inherit;
 			 padding: 3pt;
-			 margin: 0;
+			 margin: 3pt;
 			 background-color: #eee;
 			 border: 1px solid #999;
 			 border-radius: 2pt;
 		 }
+         form.inline {
+             display: inline-block;
+         }
 		</style>
 	</head>
 	<body>
 		{{template "content" .}}
 	</body>
 </html>
-`))
+`)).Funcs(template.FuncMap{
+	"quote": strconv.Quote,
+})
 
 func contentTemplate(source string) *template.Template {
 	base := template.Must(templateBase.Clone())
@@ -39,25 +47,28 @@ func contentTemplate(source string) *template.Template {
 
 var rootTemplate = contentTemplate(`
 <h1>Memsize</h1>
-<form method="POST" action="scan">
-	<button type="submit">Scan Now</button>
+{{- range .Roots -}}
+<form class="inline" method="POST" action="scan?root={{.}}">
+	<button type="submit">Scan {{quote .}}</button>
 </form>
+{{- end -}}
 <hr/>
 <h3>Reports</h3>
 <ul>
 	{{range .Reports}}
-	   <li><a href="report/{{.ID}}">{{.Date}}</a></li>
+	   <li><a href="report/{{.ID}}">{{quote .RootName}} @ {{.Date}}</a></li>
 	{{end}}
 </ul>
 `)
 
 var reportTemplate = contentTemplate(`
 <h1>Memsize Report {{.ID}}</h1>
-<form method="POST" action="../../scan">
+<form method="POST" action="../../scan?root={{.RootName}}">
 	<a class="button" href="../..">Overview</a>
 	<button type="submit">Scan Again</button>
 </form>
 <pre>
+Root: {{quote .RootName}}
 Date: {{.Date}}
 Duration: {{.Duration}}
 </pre>

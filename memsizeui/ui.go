@@ -26,10 +26,12 @@ type Report struct {
 	ID       int
 	Date     time.Time
 	Duration time.Duration
+	RootName string
 	Sizes    memsize.Sizes
 }
 
 type templateCtx struct {
+	Roots   []string
 	Reports map[int]Report
 }
 
@@ -48,7 +50,7 @@ func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	serveHTML(w, rootTemplate, &templateCtx{Reports: h.reports})
+	serveHTML(w, rootTemplate, &templateCtx{Roots: h.Roots(), Reports: h.reports})
 }
 
 func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +58,7 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid HTTP method, want POST", http.StatusMethodNotAllowed)
 		return
 	}
-	id := h.scan()
+	id := h.scan(r.URL.Query().Get("root"))
 	serveHTML(w, redirectTemplate, fmt.Sprintf("../report/%d", id))
 }
 
@@ -72,15 +74,16 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	serveHTML(w, reportTemplate, rep)
 }
 
-func (h *Handler) scan() int {
+func (h *Handler) scan(root string) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	id := h.reportID
 	start := time.Now()
-	sizes := h.Scan()
+	sizes := h.ScanRoot(root)
 	h.reports[id] = Report{
 		ID:       id,
+		RootName: root,
 		Date:     start.Truncate(1 * time.Second),
 		Duration: time.Since(start),
 		Sizes:    sizes,
