@@ -12,6 +12,7 @@ const (
 	sizeofMap       = unsafe.Sizeof(map[string]string{})
 	sizeofInterface = unsafe.Sizeof((interface{})(nil))
 	sizeofString    = unsafe.Sizeof("")
+	sizeofWord      = unsafe.Sizeof(uintptr(0))
 )
 
 type (
@@ -51,12 +52,12 @@ func TestTotal(t *testing.T) {
 		{
 			name: "struct32ptr_nil",
 			v:    &struct32ptr{},
-			want: 16,
+			want: 8 + sizeofWord,
 		},
 		{
 			name: "struct32ptr",
 			v:    &struct32ptr{cld: &struct32ptr{}},
-			want: 32,
+			want: 2 * (8 + sizeofWord),
 		},
 		{
 			name: "struct32ptr_loop",
@@ -65,7 +66,7 @@ func TestTotal(t *testing.T) {
 				v.cld = v
 				return v
 			}(),
-			want: 16,
+			want: 8 + sizeofWord,
 		},
 		{
 			name: "struct64array",
@@ -84,7 +85,7 @@ func TestTotal(t *testing.T) {
 				v.s = v
 				return v
 			}(),
-			want: 64,
+			want: sizeofWord,
 		},
 		{
 			name: "array64",
@@ -206,7 +207,6 @@ func TestTotal(t *testing.T) {
 			if size.Total() != test.want {
 				t.Errorf("total=%d, want %d", size.Total(), test.want)
 				t.Logf("\n%s", size.Report())
-
 			}
 		})
 	}

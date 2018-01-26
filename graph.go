@@ -141,7 +141,7 @@ func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintp
 			// object and rescan if the addr is of different type. This works because the
 			// type of the field/element can never be the same type as the containing
 			// struct/array.
-			if typ, ok := c.seen[uintptr(addr)]; ok && typ == v.Type() {
+			if typ, ok := c.seen[uintptr(addr)]; ok && isEqualOrPointerTo(v.Type(), typ) {
 				// TODO: add it again if different root
 				return
 			}
