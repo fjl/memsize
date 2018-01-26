@@ -66,3 +66,7 @@ Duration: {{.Duration}}
 {{.Sizes.Report}}
 </pre>
 `)
+
+var redirectTemplate = template.Must(template.New("").Parse(`
+<meta http-equiv="Refresh" content="0; URL='{{.}}'">'
+`))

@@ -57,7 +57,7 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := h.scan()
-	http.Redirect(w, r, fmt.Sprintf("../report/%d", id), http.StatusTemporaryRedirect)
+	serveHTML(w, redirectTemplate, fmt.Sprintf("../report/%d", id))
 }
 
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
