@@ -28,6 +28,7 @@ type (
 	structstring   struct{ s string }
 	structloop     struct{ s *structloop }
 	structptrslice struct{ s *structslice }
+	structmultiptr struct{ s1, s2, s3 *struct32ptr }
 	array64        [64]byte
 )
 
@@ -60,6 +61,15 @@ func TestTotal(t *testing.T) {
 				return v
 			}(),
 			want: 8 + sizeofWord,
+		},
+		{
+			name: "structmultiptr",
+			v: func() *structmultiptr {
+				v1 := &struct32ptr{x: 1}
+				v2 := &struct32ptr{x: 2, cld: v1}
+				return &structmultiptr{v1, v1, v2}
+			}(),
+			want: 3*sizeofWord + 2*(8+sizeofWord),
 		},
 		{
 			name: "struct64array",
