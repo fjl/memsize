@@ -133,11 +133,19 @@ func (s *Sizes) addValue(root string, obj *object) {
 }
 
 type context struct {
-	seen       map[uintptr]reflect.Type
-	tc         typCache
-	s          *Sizes
-	curRoot    string
-	backarrays memSpans
+	// We track previously seen objects to prevent infinite loops when scanning cycles, and
+	// to prevent scanning objects more than once. This is done in two ways:
+	//
+	// - seen holds memory spans that have been scanned already. It prevents
+	//   counting objects more than once.
+	// - visiting holds pointers on the scan stack. It prevents going into an
+	//   infinite loop for cyclic data.
+	seen     memSpans
+	visiting map[address]reflect.Type
+
+	tc      typCache
+	s       *Sizes
+	curRoot string
 }
 
 type object struct {
@@ -147,9 +155,9 @@ type object struct {
 
 func newContext() *context {
 	return &context{
-		seen: make(map[uintptr]reflect.Type),
-		tc:   make(typCache),
-		s:    newSizes(),
+		visiting: make(map[address]reflect.Type),
+		tc:       make(typCache),
+		s:        newSizes(),
 	}
 }
 
@@ -160,18 +168,26 @@ func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintp
 	extra := uintptr(0)
 	if c.tc.needScan(v.Type()) {
 		if addr.valid() {
+			// Skip this value if it was scanned earlier.
+			if c.seen.contains(addr) {
+				return 0
+			}
+			// Also skip if it is being scanned already.
 			// Problem: when scanning structs/arrays, the first field/element has the base
 			// address and would be skipped. To fix this, we track the type for each seen
 			// object and rescan if the addr is of different type. This works because the
 			// type of the field/element can never be the same type as the containing
 			// struct/array.
-			if typ, ok := c.seen[uintptr(addr)]; ok && isEqualOrPointerTo(v.Type(), typ) {
-				// TODO: add it again if different root
-				return
+			if typ, ok := c.visiting[addr]; ok && isEqualOrPointerTo(v.Type(), typ) {
+				return 0
 			}
-			c.seen[uintptr(addr)] = v.Type()
+			c.visiting[addr] = v.Type()
 		}
 		extra = c.scanContent(addr, obj)
+		if addr.valid() {
+			c.seen.commit(c.seen.insert(uintptr(addr), obj.size))
+			delete(c.visiting, addr)
+		}
 	}
 	if add {
 		obj.size += extra
@@ -235,17 +251,18 @@ func (c *context) scanSlice(obj *object) uintptr {
 	return extra + uintptr(count)*obj.v.Type().Elem().Size()
 }
 
-func (c *context) scanArrayMem(addr address, slice reflect.Value) (count int, extra uintptr) {
+func (c *context) scanArrayMem(base address, slice reflect.Value) (count int, extra uintptr) {
 	var (
+		addr    = base
 		esize   = slice.Type().Elem().Size()
-		overlap memSpans
+		size    = uintptr(slice.Cap()) * esize
+		overlap spanInsert
 	)
 	// Check whether the backing array is already tracked. If it is, scan only the
 	// previously unscanned portion of the array to avoid counting overlapping slices
 	// more than once.
-	if addr.valid() {
-		size := uintptr(slice.Cap()) * esize
-		overlap = c.backarrays.insert(uintptr(addr), size)
+	if base.valid() {
+		overlap = c.seen.insert(uintptr(addr), size)
 	}
 	for i := 0; i < slice.Len(); i++ {
 		if !overlap.contains(addr) {
@@ -253,6 +270,9 @@ func (c *context) scanArrayMem(addr address, slice reflect.Value) (count int, ex
 			count++
 		}
 		addr = addr.addOffset(esize)
+	}
+	if base.valid() {
+		c.seen.commit(overlap)
 	}
 	return count, extra
 }

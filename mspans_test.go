@@ -12,10 +12,10 @@ import (
 
 func TestMemSpans(t *testing.T) {
 	var sp memSpans
-	sp.insert(0x1, 2)
-	sp.insert(0x3, 5)
-	sp.insert(0x1, 3)
-	sp.insert(0x1, 4)
+	sp.commit(sp.insert(0x1, 2))
+	sp.commit(sp.insert(0x3, 5))
+	sp.commit(sp.insert(0x1, 3))
+	sp.commit(sp.insert(0x1, 4))
 	t.Log("tree:", sp)
 
 	if len(sp.spans) != 1 {
@@ -31,8 +31,8 @@ func TestMemSpans(t *testing.T) {
 
 func TestMemSpansTreeOverlap(t *testing.T) {
 	var sp memSpans
-	sp.insert(0x10, 16)
-	sp.insert(0x30, 16)
+	sp.commit(sp.insert(0x10, 16))
+	sp.commit(sp.insert(0x30, 16))
 	overlap := sp.insert(0x5, 256)
 	t.Log("tree:", sp)
 	t.Log("overlap:", overlap)
@@ -77,12 +77,9 @@ func TestMemSpansSorted(t *testing.T) {
 		for _, s := range input {
 			pre := sp.String()
 			overlap := sp.insert(s.start, s.len)
-			if err := sp.checkConsistency(); err != nil {
+			sp.commit(overlap)
+			if err := checkConsistency(sp.spans); err != nil {
 				t.Logf("%v after inserting %v into %s", err, s, pre)
-				return false
-			}
-			if err := overlap.checkConsistency(); err != nil {
-				t.Logf("overlap tree %v %v after inserting %v into %s", overlap, err, s, pre)
 				return false
 			}
 		}
@@ -94,17 +91,17 @@ func TestMemSpansSorted(t *testing.T) {
 	}
 }
 
-func (sp memSpans) checkConsistency() error {
-	sorted := sort.SliceIsSorted(sp.spans, func(i, j int) bool {
-		return sp.spans[i].start < sp.spans[j].start
+func checkConsistency(spans []memSpan) error {
+	sorted := sort.SliceIsSorted(spans, func(i, j int) bool {
+		return spans[i].start < spans[j].start
 	})
 	if !sorted {
 		return errors.New("not sorted")
 	}
 	disjoint := true
-	if len(sp.spans) > 0 {
-		prev := sp.spans[0]
-		for _, a := range sp.spans[1:] {
+	if len(spans) > 0 {
+		prev := spans[0]
+		for _, a := range spans[1:] {
 			if a.overlaps(prev) {
 				disjoint = false
 				break

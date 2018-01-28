@@ -15,6 +15,18 @@ type memSpan struct {
 	start, end uintptr
 }
 
+const (
+	// These are used as special markers in spanInsert.start.
+	insertNoop  = -2
+	insertAtEnd = -1
+)
+
+type spanInsert struct {
+	st         *memSpans
+	start, end int // overlap indexes
+	newspan    memSpan
+}
+
 func (ba memSpan) contains(addr uintptr) bool {
 	return addr >= ba.start && addr < ba.end
 }
@@ -40,26 +52,26 @@ func (st memSpans) String() string {
 
 // contains reports whether the given address is contained in any known span.
 func (st *memSpans) contains(addr address) bool {
-	i := st.findspan(uintptr(addr))
-	return i < len(st.spans) && st.spans[i].contains(uintptr(addr))
+	return contains(st.spans, uintptr(addr))
 }
 
-// insert adds a span. It returns a tree containing all previous spans
-// overlapped by the new one.
-func (st *memSpans) insert(start, length uintptr) memSpans {
+func (ins *spanInsert) contains(addr address) bool {
+	return ins.st != nil && contains(ins.st.spans[ins.start:ins.end], uintptr(addr))
+}
+
+// It returns a tree containing all previous spans overlapped by the new one.
+func (st *memSpans) insert(start, length uintptr) spanInsert {
 	if length == 0 {
-		return memSpans{}
+		return spanInsert{start: insertNoop}
 	}
 
 	newspan := memSpan{start: start, end: start + length}
-	i := st.findspan(start)
+	i := findspan(st.spans, start)
 	if i >= len(st.spans) {
-		// New span starts beyond any known span.
-		st.spans = append(st.spans, newspan)
-		return memSpans{}
+		return spanInsert{start: insertAtEnd, newspan: newspan}
 	}
 	// New span starts inside or before a known span.
-	// To insert it, merge with all overlapping known spans.
+	// Collect overlapping spans.
 	mstart, mend := i, i
 	for ; mend < len(st.spans) && newspan.overlaps(st.spans[mend]); mend++ {
 		e := st.spans[mend]
@@ -70,14 +82,26 @@ func (st *memSpans) insert(start, length uintptr) memSpans {
 			newspan.end = e.end
 		}
 	}
-	merged := memSpans{spans: make([]memSpan, mend-mstart)}
-	copy(merged.spans, st.spans[mstart:mend])
-	st.spans = append(st.spans[:mstart], append([]memSpan{newspan}, st.spans[mend:]...)...)
-	return merged
+	return spanInsert{st: st, start: mstart, end: mend, newspan: newspan}
 }
 
-func (st *memSpans) findspan(addr uintptr) int {
-	return sort.Search(len(st.spans), func(i int) bool {
-		return addr <= st.spans[i].start || addr <= st.spans[i].end
+func (st *memSpans) commit(ins spanInsert) {
+	switch ins.start {
+	case insertNoop:
+	case insertAtEnd:
+		st.spans = append(st.spans, ins.newspan)
+	default:
+		st.spans = append(st.spans[:ins.start], append([]memSpan{ins.newspan}, st.spans[ins.end:]...)...)
+	}
+}
+
+func contains(spans []memSpan, addr uintptr) bool {
+	i := findspan(spans, uintptr(addr))
+	return i < len(spans) && spans[i].contains(uintptr(addr))
+}
+
+func findspan(spans []memSpan, addr uintptr) int {
+	return sort.Search(len(spans), func(i int) bool {
+		return addr <= spans[i].start || addr <= spans[i].end
 	})
 }
