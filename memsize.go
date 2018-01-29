@@ -195,7 +195,7 @@ func (c *context) scanContent(addr address, obj *object) uintptr {
 		return c.scanMap(obj)
 	case reflect.Ptr:
 		if !obj.v.IsNil() {
-			return c.scan(address(obj.v.Pointer()), obj.v.Elem(), true)
+			c.scan(address(obj.v.Pointer()), obj.v.Elem(), true)
 		}
 		return 0
 	case reflect.Slice:

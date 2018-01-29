@@ -23,19 +23,12 @@ type (
 		x   uint32
 		cld *struct32ptr
 	}
-	struct64array struct {
-		array64
-	}
-	structslice struct {
-		s []uint32
-	}
-	structstring struct {
-		s string
-	}
-	structloop struct {
-		s *structloop
-	}
-	array64 [64]byte
+	struct64array  struct{ array64 }
+	structslice    struct{ s []uint32 }
+	structstring   struct{ s string }
+	structloop     struct{ s *structloop }
+	structptrslice struct{ s *structslice }
+	array64        [64]byte
 )
 
 func TestTotal(t *testing.T) {
@@ -72,6 +65,11 @@ func TestTotal(t *testing.T) {
 			name: "struct64array",
 			v:    &struct64array{},
 			want: 64,
+		},
+		{
+			name: "structptrslice",
+			v:    &structptrslice{&structslice{s: []uint32{1, 2, 3}}},
+			want: sizeofWord + sizeofSlice + 3*4,
 		},
 		{
 			name: "array_unadressable",
