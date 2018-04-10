@@ -71,13 +71,13 @@ func (tc *typCache) checkNeedScan(typ reflect.Type) bool {
 	case reflect.Struct:
 		// Structs don't need scan if none of their fields need it.
 		for i := 0; i < typ.NumField(); i++ {
-			if tc.info(typ.Field(i).Type).needScan {
+			if tc.needScan(typ.Field(i).Type) {
 				return true
 			}
 		}
 	case reflect.Array:
 		// Arrays don't need scan if their element type doesn't.
-		return tc.info(typ.Elem()).needScan
+		return tc.needScan(typ.Elem())
 	}
 	return false
 }
