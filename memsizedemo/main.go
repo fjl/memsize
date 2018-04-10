@@ -15,6 +15,7 @@ func main() {
 	s := &http.Server{Addr: "127.0.0.1:8080", Handler: h}
 	h.Add("byteslice", &byteslice)
 	h.Add("intslice", &intslice)
+	h.Add("server", s)
 	log.Println("listening on http://127.0.0.1:8080")
 	s.ListenAndServe()
 }
