@@ -1,10 +1,8 @@
-package memsize_test
+package memsize
 
 import (
 	"testing"
 	"unsafe"
-
-	"github.com/fjl/memsize"
 )
 
 const (
@@ -219,7 +217,7 @@ func TestTotal(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			var rs memsize.RootSet
+			var rs RootSet
 			rs.Add("test", test.v)
 			size := rs.Scan()
 			if size.Total() != test.want {

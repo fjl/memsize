@@ -166,28 +166,30 @@ func newContext() *context {
 func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintptr) {
 	obj := &object{v: v, size: v.Type().Size()}
 	extra := uintptr(0)
+	overlap := spanInsert{start: insertNoop}
+	if addr.valid() {
+		// Skip this value if it was scanned earlier.
+		if c.seen.contains(addr) {
+			return 0
+		}
+		// Also skip if it is being scanned already.
+		// Problem: when scanning structs/arrays, the first field/element has the base
+		// address and would be skipped. To fix this, we track the type for each seen
+		// object and rescan if the addr is of different type. This works because the
+		// type of the field/element can never be the same type as the containing
+		// struct/array.
+		if typ, ok := c.visiting[addr]; ok && isEqualOrPointerTo(v.Type(), typ) {
+			return 0
+		}
+		c.visiting[addr] = v.Type()
+		overlap = c.seen.insert(uintptr(addr), obj.size)
+	}
 	if c.tc.needScan(v.Type()) {
-		if addr.valid() {
-			// Skip this value if it was scanned earlier.
-			if c.seen.contains(addr) {
-				return 0
-			}
-			// Also skip if it is being scanned already.
-			// Problem: when scanning structs/arrays, the first field/element has the base
-			// address and would be skipped. To fix this, we track the type for each seen
-			// object and rescan if the addr is of different type. This works because the
-			// type of the field/element can never be the same type as the containing
-			// struct/array.
-			if typ, ok := c.visiting[addr]; ok && isEqualOrPointerTo(v.Type(), typ) {
-				return 0
-			}
-			c.visiting[addr] = v.Type()
-		}
 		extra = c.scanContent(addr, obj)
-		if addr.valid() {
-			c.seen.commit(c.seen.insert(uintptr(addr), obj.size))
-			delete(c.visiting, addr)
-		}
+	}
+	if addr.valid() {
+		delete(c.visiting, addr)
+		c.seen.commit(overlap)
 	}
 	if add {
 		obj.size += extra
@@ -255,8 +257,9 @@ func (c *context) scanArrayMem(base address, slice reflect.Value) (count int, ex
 	var (
 		addr    = base
 		esize   = slice.Type().Elem().Size()
+		escan   = c.tc.needScan(slice.Type().Elem())
 		size    = uintptr(slice.Cap()) * esize
-		overlap spanInsert
+		overlap = spanInsert{start: insertNoop}
 	)
 	// Check whether the backing array is already tracked. If it is, scan only the
 	// previously unscanned portion of the array to avoid counting overlapping slices
@@ -266,14 +269,14 @@ func (c *context) scanArrayMem(base address, slice reflect.Value) (count int, ex
 	}
 	for i := 0; i < slice.Len(); i++ {
 		if !overlap.contains(addr) {
-			extra += c.scan(addr, slice.Index(i), false)
+			if escan {
+				extra += c.scan(addr, slice.Index(i), false)
+			}
 			count++
 		}
 		addr = addr.addOffset(esize)
 	}
-	if base.valid() {
-		c.seen.commit(overlap)
-	}
+	c.seen.commit(overlap)
 	return count, extra
 }
 
@@ -283,9 +286,11 @@ func (c *context) scanMap(obj *object) uintptr {
 		len   = uintptr(obj.v.Len())
 		extra = uintptr(0)
 	)
-	for _, k := range obj.v.MapKeys() {
-		extra += c.scan(invalidAddr, k, false)
-		extra += c.scan(invalidAddr, obj.v.MapIndex(k), false)
+	if c.tc.needScan(typ.Key()) || c.tc.needScan(typ.Elem()) {
+		for _, k := range obj.v.MapKeys() {
+			extra += c.scan(invalidAddr, k, false)
+			extra += c.scan(invalidAddr, obj.v.MapIndex(k), false)
+		}
 	}
 	return len*typ.Key().Size() + len*typ.Elem().Size() + extra
 }

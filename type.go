@@ -39,27 +39,47 @@ type typInfo struct {
 	needScan  bool
 }
 
+// isPointer returns true for pointer-ish values. The notion of
+// pointer includes everything but plain values, i.e. slices, maps
+// channels, interfaces are 'pointer', too.
 func (tc *typCache) isPointer(typ reflect.Type) bool {
 	return tc.info(typ).isPointer
 }
 
+// needScan reports whether a value of the type needs to be scanned
+// recursively because it may contain pointers.
 func (tc *typCache) needScan(typ reflect.Type) bool {
 	return tc.info(typ).needScan
 }
 
 func (tc *typCache) info(typ reflect.Type) typInfo {
-	if info, ok := (*tc)[typ]; ok {
+	info, found := (*tc)[typ]
+	switch {
+	case found:
 		return info
+	case isPointer(typ):
+		info = typInfo{true, true}
+	default:
+		info = typInfo{false, tc.checkNeedScan(typ)}
 	}
-	info := tc.makeInfo(typ)
 	(*tc)[typ] = info
 	return info
 }
 
-func (tc *typCache) makeInfo(typ reflect.Type) typInfo {
-	k := typ.Kind()
-	p := isPointer(typ)
-	return typInfo{isPointer: p, needScan: p || k >= reflect.Array && k <= reflect.Struct}
+func (tc *typCache) checkNeedScan(typ reflect.Type) bool {
+	switch k := typ.Kind(); k {
+	case reflect.Struct:
+		// Structs don't need scan if none of their fields need it.
+		for i := 0; i < typ.NumField(); i++ {
+			if tc.info(typ.Field(i).Type).needScan {
+				return true
+			}
+		}
+	case reflect.Array:
+		// Arrays don't need scan if their element type doesn't.
+		return tc.info(typ.Elem()).needScan
+	}
+	return false
 }
 
 func isPointer(typ reflect.Type) bool {
