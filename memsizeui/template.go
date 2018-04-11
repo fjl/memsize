@@ -3,11 +3,18 @@ package memsizeui
 import (
 	"html/template"
 	"strconv"
+	"sync"
 
 	"github.com/fjl/memsize"
 )
 
-var templateBase = template.Must(template.New("base").Parse(`<!DOCTYPE html>
+var (
+	base         *template.Template // the "base" template
+	baseInitOnce sync.Once
+)
+
+func baseInit() {
+	base = template.Must(template.New("base").Parse(`<!DOCTYPE html>
 <html>
 	<head>
 		<meta charset="UTF-8">
@@ -36,25 +43,32 @@ var templateBase = template.Must(template.New("base").Parse(`<!DOCTYPE html>
 	<body>
 		{{template "content" .}}
 	</body>
-</html>
-`)).Funcs(template.FuncMap{
-	"quote":     strconv.Quote,
-	"humansize": memsize.HumanSize,
-})
+</html>`))
+
+	base.Funcs(template.FuncMap{
+		"quote":     strconv.Quote,
+		"humansize": memsize.HumanSize,
+	})
+
+	template.Must(base.New("rootbuttons").Parse(`
+<a class="button" href="/">Overview</a>
+{{- range .Roots -}}
+<form class="inline" method="POST" action="/scan?root={{.}}">
+	<button type="submit">Scan {{quote .}}</button>
+</form>
+{{- end -}}`))
+}
 
 func contentTemplate(source string) *template.Template {
-	base := template.Must(templateBase.Clone())
-	template.Must(base.New("content").Parse(source))
-	return base
+	baseInitOnce.Do(baseInit)
+	t := template.Must(base.Clone())
+	template.Must(t.New("content").Parse(source))
+	return t
 }
 
 var rootTemplate = contentTemplate(`
 <h1>Memsize</h1>
-{{- range .Roots -}}
-<form class="inline" method="POST" action="scan?root={{.}}">
-	<button type="submit">Scan {{quote .}}</button>
-</form>
-{{- end -}}
+{{template "rootbuttons" .}}
 <hr/>
 <h3>Reports</h3>
 <ul>
@@ -62,6 +76,11 @@ var rootTemplate = contentTemplate(`
 	   <li><a href="report/{{.ID}}">{{quote .RootName}} @ {{.Date}}</a></li>
 	{{end}}
 </ul>
+`)
+
+var notFoundTemplate = contentTemplate(`
+<h1>Report not found</h1>
+{{template "rootbuttons" .}}
 `)
 
 var reportTemplate = contentTemplate(`

@@ -30,7 +30,7 @@ type Report struct {
 	Sizes    memsize.Sizes
 }
 
-type templateCtx struct {
+type templateInfo struct {
 	Roots   []string
 	Reports map[int]Report
 }
@@ -45,12 +45,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }
 
+func (h *Handler) templateInfo() *templateInfo {
+	return &templateInfo{Roots: h.Roots(), Reports: h.reports}
+}
+
 func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
-	serveHTML(w, rootTemplate, &templateCtx{Roots: h.Roots(), Reports: h.reports})
+	serveHTML(w, rootTemplate, http.StatusOK, h.templateInfo())
 }
 
 func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
@@ -69,10 +73,10 @@ func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 
 	rep, ok := h.reports[id]
 	if !ok {
-		http.Error(w, "report not found", http.StatusNotFound)
-		return
+		serveHTML(w, notFoundTemplate, http.StatusNotFound, h.templateInfo())
+	} else {
+		serveHTML(w, reportTemplate, http.StatusOK, rep)
 	}
-	serveHTML(w, reportTemplate, rep)
 }
 
 func (h *Handler) scan(root string) int {
@@ -93,7 +97,7 @@ func (h *Handler) scan(root string) int {
 	return id
 }
 
-func serveHTML(w http.ResponseWriter, tpl *template.Template, data interface{}) {
+func serveHTML(w http.ResponseWriter, tpl *template.Template, status int, data interface{}) {
 	w.Header().Set("content-type", "text/html")
 	var buf bytes.Buffer
 	if err := tpl.Execute(&buf, data); err != nil {
