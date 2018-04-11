@@ -107,7 +107,8 @@ func unhandledKind(k reflect.Kind) {
 	panic("unhandled kind " + k.String())
 }
 
-func humanSize(bytes uintptr) string {
+// HumanSize formats the given number of bytes as a readable string.
+func HumanSize(bytes uintptr) string {
 	switch {
 	case bytes < 1024:
 		return fmt.Sprintf("%d B", bytes)

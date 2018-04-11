@@ -58,6 +58,8 @@ func (g *RootSet) scan(roots map[string]reflect.Value) Sizes {
 	for name, root := range roots {
 		ctx.curRoot = name
 		ctx.scan(invalidAddr, root, false)
+		ctx.s.BitmapSize = ctx.seen.size()
+		ctx.s.BitmapUtilization = ctx.seen.utilization()
 	}
 	return *ctx.s
 }
@@ -73,6 +75,9 @@ func Scan(root interface{}) Sizes {
 type Sizes struct {
 	ByRoot map[string]uintptr
 	ByType map[reflect.Type]*TypeSize
+	// Internal stats (for debugging)
+	BitmapSize        uintptr
+	BitmapUtilization float32
 }
 
 type TypeSize struct {
@@ -115,7 +120,7 @@ func (s Sizes) Report() string {
 
 	buf := new(bytes.Buffer)
 	for _, line := range tab {
-		fmt.Fprintln(buf, line.name, strings.Repeat(" ", maxwidth-len(line.name)), humanSize(line.total))
+		fmt.Fprintln(buf, line.name, strings.Repeat(" ", maxwidth-len(line.name)), HumanSize(line.total))
 	}
 	return buf.String()
 }
@@ -140,7 +145,7 @@ type context struct {
 	//   counting objects more than once.
 	// - visiting holds pointers on the scan stack. It prevents going into an
 	//   infinite loop for cyclic data.
-	seen     memSpans
+	seen     *bitmap
 	visiting map[address]reflect.Type
 
 	tc      typCache
@@ -150,6 +155,7 @@ type context struct {
 
 func newContext() *context {
 	return &context{
+		seen:     newBitmap(),
 		visiting: make(map[address]reflect.Type),
 		tc:       make(typCache),
 		s:        newSizes(),
@@ -160,10 +166,9 @@ func newContext() *context {
 // amount of 'extra' memory (e.g. slice data) that is referenced by the object.
 func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintptr) {
 	size := v.Type().Size()
-	overlap := spanInsert{start: insertNoop}
 	if addr.valid() {
 		// Skip this value if it was scanned earlier.
-		if c.seen.contains(addr) {
+		if c.seen.isMarked(uintptr(addr)) {
 			return 0
 		}
 		// Also skip if it is being scanned already.
@@ -176,7 +181,6 @@ func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintp
 			return 0
 		}
 		c.visiting[addr] = v.Type()
-		overlap = c.seen.insert(uintptr(addr), size)
 	}
 	extra := uintptr(0)
 	if c.tc.needScan(v.Type()) {
@@ -184,7 +188,7 @@ func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintp
 	}
 	if addr.valid() {
 		delete(c.visiting, addr)
-		c.seen.commit(overlap)
+		c.seen.markRange(uintptr(addr), size)
 	}
 	if add {
 		size += extra
@@ -250,28 +254,23 @@ func (c *context) scanSlice(v reflect.Value) uintptr {
 
 func (c *context) scanArrayMem(base address, slice reflect.Value) (count int, extra uintptr) {
 	var (
-		addr    = base
-		esize   = slice.Type().Elem().Size()
-		escan   = c.tc.needScan(slice.Type().Elem())
-		size    = uintptr(slice.Cap()) * esize
-		overlap = spanInsert{start: insertNoop}
+		addr  = base
+		esize = slice.Type().Elem().Size()
+		escan = c.tc.needScan(slice.Type().Elem())
 	)
 	// Check whether the backing array is already tracked. If it is, scan only the
 	// previously unscanned portion of the array to avoid counting overlapping slices
 	// more than once.
-	if base.valid() {
-		overlap = c.seen.insert(uintptr(addr), size)
-	}
 	for i := 0; i < slice.Len(); i++ {
-		if !overlap.contains(addr) {
+		if !c.seen.isMarked(uintptr(addr)) {
 			if escan {
 				extra += c.scan(addr, slice.Index(i), false)
 			}
+			c.seen.markRange(uintptr(addr), esize)
 			count++
 		}
 		addr = addr.addOffset(esize)
 	}
-	c.seen.commit(overlap)
 	return count, extra
 }
 
