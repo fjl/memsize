@@ -3,6 +3,8 @@ package memsizeui
 import (
 	"html/template"
 	"strconv"
+
+	"github.com/fjl/memsize"
 )
 
 var templateBase = template.Must(template.New("base").Parse(`<!DOCTYPE html>
@@ -36,7 +38,8 @@ var templateBase = template.Must(template.New("base").Parse(`<!DOCTYPE html>
 	</body>
 </html>
 `)).Funcs(template.FuncMap{
-	"quote": strconv.Quote,
+	"quote":     strconv.Quote,
+	"humansize": memsize.HumanSize,
 })
 
 func contentTemplate(source string) *template.Template {
@@ -71,6 +74,8 @@ var reportTemplate = contentTemplate(`
 Root: {{quote .RootName}}
 Date: {{.Date}}
 Duration: {{.Duration}}
+Bitmap Size: {{.Sizes.BitmapSize | humansize}}
+Bitmap Utilization: {{.Sizes.BitmapUtilization}}
 </pre>
 <hr/>
 <pre>
