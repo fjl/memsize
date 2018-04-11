@@ -59,7 +59,8 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := h.scan(r.URL.Query().Get("root"))
-	serveHTML(w, redirectTemplate, fmt.Sprintf("../report/%d", id))
+	w.Header().Add("Location", fmt.Sprintf("../report/%d", id))
+	w.WriteHeader(http.StatusSeeOther)
 }
 
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
