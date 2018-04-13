@@ -16,14 +16,6 @@ You can traverse the graph to get all the objects and their respective sizes:
     fmt.Println(sizes.Total())
 
 memsize can handle cycles just fine and tracks both private and public struct fields.
-There are a few limitations though:
-
-Channel buffers and closures cannot be scanned
-
-There is no way to get the content of a channel buffer without reading from the channel.
-memsize will report size based on the cap of the channel, but can't tell you how much
-memory is used its elements.
-
-Function closures cannot be inspected in any way.
+Unfortunately function closures cannot be inspected in any way.
 */
 package memsize

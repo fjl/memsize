@@ -11,6 +11,7 @@ const (
 	sizeofInterface = unsafe.Sizeof((interface{})(nil))
 	sizeofString    = unsafe.Sizeof("")
 	sizeofWord      = unsafe.Sizeof(uintptr(0))
+	sizeofChan      = unsafe.Sizeof(make(chan struct{}))
 )
 
 type (
@@ -212,6 +213,85 @@ func TestTotal(t *testing.T) {
 			name: "interface_nil",
 			v:    &[2]interface{}{nil, nil},
 			want: 2 * sizeofInterface,
+		},
+		{
+			name: "empty_chan",
+			v: func() *chan uint64 {
+				c := make(chan uint64)
+				return &c
+			}(),
+			want: sizeofChan,
+		},
+		{
+			name: "empty_closed_chan",
+			v: func() *chan uint64 {
+				c := make(chan uint64)
+				close(c)
+				return &c
+			}(),
+			want: sizeofChan,
+		},
+		{
+			name: "empty_chan_buffer",
+			v: func() *chan uint64 {
+				c := make(chan uint64, 10)
+				return &c
+			}(),
+			want: sizeofChan + 10*8,
+		},
+		{
+			name: "chan_buffer",
+			v: func() *chan uint64 {
+				c := make(chan uint64, 10)
+				for i := 0; i < 8; i++ {
+					c <- 0
+				}
+				return &c
+			}(),
+			want: sizeofChan + 10*8,
+		},
+		{
+			name: "closed_chan_buffer",
+			v: func() *chan uint64 {
+				c := make(chan uint64, 10)
+				for i := 0; i < 8; i++ {
+					c <- 0
+				}
+				close(c)
+				return &c
+			}(),
+			want: sizeofChan + 10*8,
+		},
+		{
+			name: "chan_buffer_escan",
+			v: func() *chan *struct16 {
+				c := make(chan *struct16, 10)
+				for i := 0; i < 8; i++ {
+					c <- &struct16{x: uint64(i)}
+				}
+				return &c
+			}(),
+			want: sizeofChan + 10*sizeofWord + 8*16,
+		},
+		{
+			name: "closed_chan_buffer_escan",
+			v: func() *chan *struct16 {
+				c := make(chan *struct16, 10)
+				for i := 0; i < 8; i++ {
+					c <- &struct16{x: uint64(i)}
+				}
+				close(c)
+				return &c
+			}(),
+			want: sizeofChan + 10*sizeofWord + 8*16,
+		},
+		{
+			name: "nil_chan",
+			v: func() *chan *struct16 {
+				var c chan *struct16
+				return &c
+			}(),
+			want: sizeofChan,
 		},
 	}
 	for _, test := range tests {

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unsafe"
 )
 
 // RootSet holds roots to scan.
@@ -229,7 +230,18 @@ func (c *context) scanContent(addr address, v reflect.Value) uintptr {
 
 func (c *context) scanChan(v reflect.Value) uintptr {
 	etyp := v.Type().Elem()
-	return uintptr(v.Cap()) * etyp.Size()
+	extra := uintptr(0)
+	if c.tc.needScan(etyp) {
+		// Scan the channel buffer. This is unsafe but doesn't race because
+		// the world is stopped during scan.
+		hchan := unsafe.Pointer(v.Pointer())
+		for i := uint(0); i < uint(v.Cap()); i++ {
+			addr := chanbuf(hchan, i)
+			elem := reflect.NewAt(etyp, addr).Elem()
+			extra += c.scan(address(addr), elem, false)
+		}
+	}
+	return uintptr(v.Cap())*etyp.Size() + extra
 }
 
 func (c *context) scanStruct(base address, v reflect.Value) uintptr {
