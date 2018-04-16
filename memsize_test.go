@@ -18,16 +18,16 @@ type (
 	struct16 struct {
 		x, y uint64
 	}
-	struct32ptr struct {
+	structptr struct {
 		x   uint32
-		cld *struct32ptr
+		cld *structptr
 	}
 	struct64array  struct{ array64 }
 	structslice    struct{ s []uint32 }
 	structstring   struct{ s string }
 	structloop     struct{ s *structloop }
 	structptrslice struct{ s *structslice }
-	structmultiptr struct{ s1, s2, s3 *struct32ptr }
+	structmultiptr struct{ s1, s2, s3 *structptr }
 	array64        [64]byte
 )
 
@@ -43,32 +43,32 @@ func TestTotal(t *testing.T) {
 			want: 16,
 		},
 		{
-			name: "struct32ptr_nil",
-			v:    &struct32ptr{},
-			want: 8 + sizeofWord,
+			name: "structptr_nil",
+			v:    &structptr{},
+			want: 2 * sizeofWord,
 		},
 		{
-			name: "struct32ptr",
-			v:    &struct32ptr{cld: &struct32ptr{}},
-			want: 2 * (8 + sizeofWord),
+			name: "structptr",
+			v:    &structptr{cld: &structptr{}},
+			want: 2 * 2 * sizeofWord,
 		},
 		{
-			name: "struct32ptr_loop",
-			v: func() *struct32ptr {
-				v := &struct32ptr{}
+			name: "structptr_loop",
+			v: func() *structptr {
+				v := &structptr{}
 				v.cld = v
 				return v
 			}(),
-			want: 8 + sizeofWord,
+			want: 2 * sizeofWord,
 		},
 		{
 			name: "structmultiptr",
 			v: func() *structmultiptr {
-				v1 := &struct32ptr{x: 1}
-				v2 := &struct32ptr{x: 2, cld: v1}
+				v1 := &structptr{x: 1}
+				v2 := &structptr{x: 2, cld: v1}
 				return &structmultiptr{v1, v1, v2}
 			}(),
-			want: 3*sizeofWord + 2*(8+sizeofWord),
+			want: 3*sizeofWord + 2*2*sizeofWord,
 		},
 		{
 			name: "struct64array",
@@ -112,27 +112,27 @@ func TestTotal(t *testing.T) {
 		{
 			name: "byteslice",
 			v:    &[]byte{1, 2, 3},
-			want: 27,
+			want: sizeofSlice + 3,
 		},
 		{
 			name: "slice3_ptrval",
 			v:    &[]*struct16{{}, {}, {}},
-			want: 96,
+			want: sizeofSlice + 3*sizeofWord + 3*16,
 		},
 		{
 			name: "map3",
 			v:    &map[uint64]uint64{1: 1, 2: 2, 3: 3},
-			want: 56,
+			want: sizeofMap + 3*8 /* keys */ + 3*8, /* values */
 		},
 		{
 			name: "map3_ptrval",
 			v:    &map[uint64]*struct16{1: {}, 2: {}, 3: {}},
-			want: 104,
+			want: sizeofMap + 3*8 /* keys */ + 3*sizeofWord /* value pointers */ + 3*16, /* values */
 		},
 		{
 			name: "map3_ptrkey",
 			v:    &map[*struct16]uint64{{x: 1}: 1, {x: 2}: 2, {x: 3}: 3},
-			want: 104,
+			want: sizeofMap + 3*sizeofWord /* key pointers */ + 3*16 /* keys */ + 3*8, /* values */
 		},
 		{
 			name: "pointerpointer",
@@ -141,7 +141,7 @@ func TestTotal(t *testing.T) {
 				p := &i
 				return &p
 			}(),
-			want: 16,
+			want: sizeofWord + 8,
 		},
 		{
 			name: "structstring",
