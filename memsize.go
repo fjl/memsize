@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"text/tabwriter"
 	"unsafe"
 )
 
@@ -83,6 +84,7 @@ type Sizes struct {
 
 type TypeSize struct {
 	Total  uintptr
+	Count  uintptr
 	ByRoot map[string]uintptr
 }
 
@@ -101,28 +103,32 @@ func (s Sizes) Total() uintptr {
 
 // Report returns a human-readable report.
 func (s Sizes) Report() string {
-	// Make a type table
 	type typLine struct {
 		name  string
+		count uintptr
 		total uintptr
 	}
-	tab := []typLine{{"TOTAL", s.Total()}}
-	maxwidth := len(tab[0].name)
+	tab := []typLine{{"ALL", 0, s.Total()}}
+	for _, typ := range s.ByType {
+		tab[0].count += typ.Count
+	}
+	maxname := 0
 	for typ, s := range s.ByType {
-		line := typLine{typ.String(), s.Total}
+		line := typLine{typ.String(), s.Count, s.Total}
 		tab = append(tab, line)
-		if len(line.name) > maxwidth {
-			maxwidth = len(line.name)
+		if len(line.name) > maxname {
+			maxname = len(line.name)
 		}
 	}
-	sort.Slice(tab, func(i, j int) bool {
-		return tab[i].total > tab[j].total
-	})
+	sort.Slice(tab, func(i, j int) bool { return tab[i].total > tab[j].total })
 
 	buf := new(bytes.Buffer)
+	w := tabwriter.NewWriter(buf, 0, 0, 0, ' ', tabwriter.AlignRight)
 	for _, line := range tab {
-		fmt.Fprintln(buf, line.name, strings.Repeat(" ", maxwidth-len(line.name)), HumanSize(line.total))
+		namespace := strings.Repeat(" ", maxname-len(line.name))
+		fmt.Fprintf(w, "%s%s\t  %v\t  %s\t\n", line.name, namespace, line.count, HumanSize(line.total))
 	}
+	w.Flush()
 	return buf.String()
 }
 
@@ -136,6 +142,7 @@ func (s *Sizes) addValue(root string, v reflect.Value, size uintptr) {
 	}
 	rs.ByRoot[root] += size
 	rs.Total += size
+	rs.Count++
 }
 
 type context struct {
