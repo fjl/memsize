@@ -25,22 +25,57 @@ func TestBitmapBlock(t *testing.T) {
 			t.Fatalf("wrong mark at %d", i)
 		}
 	}
-	if count := b.onesCount(); count != len(marks) {
+	if count := b.count(0, bmBlockRange-1); count != len(marks) {
 		t.Fatalf("wrong onesCount: got %d, want %d", count, len(marks))
+	}
+}
+
+func TestBitmapBlockCount(t *testing.T) {
+	var b bmBlock
+	// Mark addresses (90,250)
+	for i := 90; i < 250; i++ {
+		b.mark(uintptr(i))
+	}
+	// Check counts.
+	tests := []struct {
+		start, end uintptr
+		want       int
+	}{
+		{start: 0, end: 0, want: 0},
+		{start: 0, end: 10, want: 0},
+		{start: 0, end: 250, want: 160},
+		{start: 0, end: 240, want: 150},
+		{start: 0, end: bmBlockRange - 1, want: 160},
+		{start: 100, end: bmBlockRange - 1, want: 150},
+		{start: 100, end: 110, want: 10},
+		{start: 100, end: 250, want: 150},
+		{start: 100, end: 211, want: 111},
+		{start: 111, end: 211, want: 100},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%d-%d", test.start, test.end), func(t *testing.T) {
+			if c := b.count(test.start, test.end); c != test.want {
+				t.Errorf("wrong onesCountRange(%d, %d): got %d, want %d", test.start, test.end, c, test.want)
+			}
+		})
 	}
 }
 
 func TestBitmapMarkRange(t *testing.T) {
 	N := 1000
 
-	// Generate random mark ranges
-	r := rand.New(rand.NewSource(312321312))
-	bm := newBitmap()
-	ranges := make(map[uintptr]uintptr)
-	addr := uintptr(0)
+	// Generate random non-overlapping mark ranges.
+	var (
+		r      = rand.New(rand.NewSource(312321312))
+		bm     = newBitmap()
+		ranges = make(map[uintptr]uintptr)
+		addr   uintptr
+		total  uintptr // number of bytes marked
+	)
 	for i := 0; i < N; i++ {
 		addr += uintptr(r.Intn(bmBlockRange))
 		len := uintptr(r.Intn(40))
+		total += len
 		ranges[addr] = len
 		bm.markRange(addr, len)
 	}
@@ -52,6 +87,11 @@ func TestBitmapMarkRange(t *testing.T) {
 				t.Fatalf("not marked at %d", start)
 			}
 		}
+	}
+
+	// Check total number of bits is reported correctly.
+	if c := bm.countRange(0, addr+ranges[addr]); c != total {
+		t.Errorf("countRange(0, %d) returned %d, want %d", addr, c, total)
 	}
 
 	// Probe random addresses.

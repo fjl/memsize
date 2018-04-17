@@ -166,7 +166,6 @@ func newContext() *context {
 // scan walks all objects below v, determining their size. All scan* functions return the
 // amount of 'extra' memory (e.g. slice data) that is referenced by the object.
 func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintptr) {
-	size := v.Type().Size()
 	if addr.valid() {
 		// Skip this value if it was scanned earlier.
 		if c.seen.isMarked(uintptr(addr)) {
@@ -186,7 +185,9 @@ func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintp
 	extra := uintptr(0)
 	if c.tc.needScan(v.Type()) {
 		extra = c.scanContent(addr, v)
+
 	}
+	size := v.Type().Size()
 	if addr.valid() {
 		delete(c.visiting, addr)
 		c.seen.markRange(uintptr(addr), size)
@@ -254,36 +255,35 @@ func (c *context) scanStruct(base address, v reflect.Value) uintptr {
 }
 
 func (c *context) scanArray(addr address, v reflect.Value) uintptr {
-	_, extra := c.scanArrayMem(addr, v)
+	esize := v.Type().Elem().Size()
+	extra := uintptr(0)
+	for i := 0; i < v.Len(); i++ {
+		extra += c.scan(addr, v.Index(i), false)
+		addr = addr.addOffset(esize)
+	}
 	return extra
 }
 
 func (c *context) scanSlice(v reflect.Value) uintptr {
 	slice := v.Slice(0, v.Cap())
-	count, extra := c.scanArrayMem(address(v.Pointer()), slice)
-	return extra + uintptr(count)*v.Type().Elem().Size()
-}
-
-func (c *context) scanArrayMem(base address, slice reflect.Value) (count int, extra uintptr) {
-	var (
-		addr  = base
-		esize = slice.Type().Elem().Size()
-		escan = c.tc.needScan(slice.Type().Elem())
-	)
-	// Check whether the backing array is already tracked. If it is, scan only the
-	// previously unscanned portion of the array to avoid counting overlapping slices
-	// more than once.
-	for i := 0; i < slice.Len(); i++ {
-		if !c.seen.isMarked(uintptr(addr)) {
-			if escan {
-				extra += c.scan(addr, slice.Index(i), false)
-			}
-			c.seen.markRange(uintptr(addr), esize)
-			count++
+	esize := slice.Type().Elem().Size()
+	base := slice.Pointer()
+	// Add size of the unscanned portion of the backing array to extra.
+	blen := uintptr(slice.Len()) * esize
+	marked := c.seen.countRange(base, blen)
+	extra := blen - marked
+	if c.tc.needScan(slice.Type().Elem()) {
+		// Elements may contain pointers, scan them individually.
+		addr := address(base)
+		for i := 0; i < slice.Len(); i++ {
+			extra += c.scan(addr, slice.Index(i), false)
+			addr = addr.addOffset(esize)
 		}
-		addr = addr.addOffset(esize)
+	} else {
+		// No pointers, just mark as seen.
+		c.seen.markRange(uintptr(base), blen)
 	}
-	return count, extra
+	return extra
 }
 
 func (c *context) scanMap(v reflect.Value) uintptr {

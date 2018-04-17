@@ -1,6 +1,8 @@
 package memsize
 
-import "math/bits"
+import (
+	"math/bits"
+)
 
 const (
 	uintptrBits  = 32 << (uint64(^uintptr(0)) >> 63)
@@ -21,8 +23,8 @@ func newBitmap() *bitmap {
 // markRange sets n consecutive bits starting at addr.
 func (b *bitmap) markRange(addr, n uintptr) {
 	for end := addr + n; addr < end; {
-		block, start := b.block(addr)
-		for i := addr - start; i < bmBlockRange && addr < end; i++ {
+		block, baddr := b.block(addr)
+		for i := baddr; i < bmBlockRange && addr < end; i++ {
 			block.mark(i)
 			addr++
 		}
@@ -31,21 +33,36 @@ func (b *bitmap) markRange(addr, n uintptr) {
 
 // isMarked returns the value of the bit at the given address.
 func (b *bitmap) isMarked(addr uintptr) bool {
-	block, start := b.block(addr)
-	return block.isMarked(addr - start)
+	block, baddr := b.block(addr)
+	return block.isMarked(baddr)
+}
+
+// countRange returns the number of set bits in the range (addr,addr+n).
+func (b *bitmap) countRange(addr, n uintptr) uintptr {
+	c := uintptr(0)
+	for end := addr + n; addr < end; {
+		block, baddr := b.block(addr)
+		bend := uintptr(bmBlockRange - 1)
+		if baddr+(end-addr) < bmBlockRange {
+			bend = baddr + (end - addr)
+		}
+		c += uintptr(block.count(baddr, bend))
+		// Move addr to next block.
+		addr += bmBlockRange - baddr
+	}
+	return c
 }
 
 // block finds the block corresponding to the given memory address.
 // It also returns the block's starting address.
 func (b *bitmap) block(addr uintptr) (*bmBlock, uintptr) {
 	index := addr / bmBlockRange
-	start := index * bmBlockRange
 	block := b.blocks[index]
 	if block == nil {
 		block = new(bmBlock)
 		b.blocks[index] = block
 	}
-	return block, start
+	return block, addr % bmBlockRange
 }
 
 // size returns the sum of the byte sizes of all blocks.
@@ -57,7 +74,7 @@ func (b *bitmap) size() uintptr {
 func (b *bitmap) utilization() float32 {
 	var avg float32
 	for _, block := range b.blocks {
-		avg += float32(block.onesCount()) / float32(bmBlockRange)
+		avg += float32(block.count(0, bmBlockRange-1)) / float32(bmBlockRange)
 	}
 	return avg / float32(len(b.blocks))
 }
@@ -75,11 +92,28 @@ func (b *bmBlock) isMarked(i uintptr) bool {
 	return (b[i/uintptrBits] & (1 << (i % uintptrBits))) != 0
 }
 
-// onesCount returns the number of one bits in the block
-func (b *bmBlock) onesCount() int {
-	var count int
-	for _, w := range b {
-		count += bits.OnesCount64(uint64(w))
+// count returns the number of set bits in the range (start,end).
+func (b *bmBlock) count(start, end uintptr) (count int) {
+	br := b[start/uintptrBits : end/uintptrBits+1]
+	for i, w := range br {
+		if i == 0 {
+			w &= blockmask(start)
+		}
+		if i == len(br)-1 {
+			w &^= blockmask(end)
+		}
+		count += onesCountPtr(w)
 	}
 	return count
+}
+
+func blockmask(x uintptr) uintptr {
+	return ^uintptr(0) << (x % uintptrBits)
+}
+
+func onesCountPtr(x uintptr) int {
+	if uintptrBits == 64 {
+		return bits.OnesCount64(uint64(x))
+	}
+	return bits.OnesCount32(uint32(x))
 }
