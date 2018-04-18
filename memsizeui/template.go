@@ -51,10 +51,10 @@ func baseInit() {
 	})
 
 	template.Must(base.New("rootbuttons").Parse(`
-<a class="button" href="/">Overview</a>
-{{- range .Roots -}}
-<form class="inline" method="POST" action="/scan?root={{.}}">
-	<button type="submit">Scan {{quote .}}</button>
+<a class="button" href="{{$.Link ""}}">Overview</a>
+{{- range $root := .Roots -}}
+<form class="inline" method="POST" action="{{$.Link "scan?root=" $root}}">
+	<button type="submit">Scan {{quote $root}}</button>
 </form>
 {{- end -}}`))
 }
@@ -73,8 +73,10 @@ var rootTemplate = contentTemplate(`
 <h3>Reports</h3>
 <ul>
 	{{range .Reports}}
-	   <li><a href="report/{{.ID}}">{{quote .RootName}} @ {{.Date}}</a></li>
-	{{end}}
+	   <li><a href="{{printf "%d" | $.Link "report/"}}">{{quote .RootName}} @ {{.Date}}</a></li>
+	{{else}}
+       No reports yet, hit a scan button to create one.
+    {{end}}
 </ul>
 `)
 
@@ -84,20 +86,21 @@ var notFoundTemplate = contentTemplate(`
 `)
 
 var reportTemplate = contentTemplate(`
-<h1>Memsize Report {{.ID}}</h1>
-<form method="POST" action="../../scan?root={{.RootName}}">
-	<a class="button" href="../..">Overview</a>
+{{- $report := .Data -}}
+<h1>Memsize Report {{$report.ID}}</h1>
+<form method="POST" action="{{$.Link "scan?root=" $report.RootName}}">
+	<a class="button" href="{{$.Link ""}}">Overview</a>
 	<button type="submit">Scan Again</button>
 </form>
 <pre>
-Root: {{quote .RootName}}
-Date: {{.Date}}
-Duration: {{.Duration}}
-Bitmap Size: {{.Sizes.BitmapSize | humansize}}
-Bitmap Utilization: {{.Sizes.BitmapUtilization}}
+Root: {{quote $report.RootName}}
+Date: {{$report.Date}}
+Duration: {{$report.Duration}}
+Bitmap Size: {{$report.Sizes.BitmapSize | humansize}}
+Bitmap Utilization: {{$report.Sizes.BitmapUtilization}}
 </pre>
 <hr/>
 <pre>
-{{.Sizes.Report}}
+{{$report.Sizes.Report}}
 </pre>
 `)

@@ -31,8 +31,15 @@ type Report struct {
 }
 
 type templateInfo struct {
-	Roots   []string
-	Reports map[int]Report
+	Roots     []string
+	Reports   map[int]Report
+	PathDepth int
+	Data      interface{}
+}
+
+func (ti *templateInfo) Link(path ...string) string {
+	prefix := strings.Repeat("../", ti.PathDepth)
+	return prefix + strings.Join(path, "")
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +52,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }
 
-func (h *Handler) templateInfo() *templateInfo {
-	return &templateInfo{Roots: h.Roots(), Reports: h.reports}
+func (h *Handler) templateInfo(r *http.Request, data interface{}) *templateInfo {
+	return &templateInfo{
+		Roots:     h.Roots(),
+		Reports:   h.reports,
+		PathDepth: strings.Count(r.URL.Path, "/") - 1,
+		Data:      data,
+	}
 }
 
 func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +66,7 @@ func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	serveHTML(w, rootTemplate, http.StatusOK, h.templateInfo())
+	serveHTML(w, rootTemplate, http.StatusOK, h.templateInfo(r, nil))
 }
 
 func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
@@ -62,20 +74,20 @@ func (h *Handler) handleScan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid HTTP method, want POST", http.StatusMethodNotAllowed)
 		return
 	}
+	ti := h.templateInfo(r, nil)
 	id := h.scan(r.URL.Query().Get("root"))
-	w.Header().Add("Location", fmt.Sprintf("../report/%d", id))
+	w.Header().Add("Location", ti.Link(fmt.Sprintf("report/%d", id)))
 	w.WriteHeader(http.StatusSeeOther)
 }
 
 func (h *Handler) handleReport(w http.ResponseWriter, r *http.Request) {
 	var id int
 	fmt.Sscan(strings.TrimPrefix(r.URL.Path, "/report/"), &id)
-
-	rep, ok := h.reports[id]
+	report, ok := h.reports[id]
 	if !ok {
-		serveHTML(w, notFoundTemplate, http.StatusNotFound, h.templateInfo())
+		serveHTML(w, notFoundTemplate, http.StatusNotFound, h.templateInfo(r, nil))
 	} else {
-		serveHTML(w, reportTemplate, http.StatusOK, rep)
+		serveHTML(w, reportTemplate, http.StatusOK, h.templateInfo(r, report))
 	}
 }
 
@@ -97,10 +109,10 @@ func (h *Handler) scan(root string) int {
 	return id
 }
 
-func serveHTML(w http.ResponseWriter, tpl *template.Template, status int, data interface{}) {
+func serveHTML(w http.ResponseWriter, tpl *template.Template, status int, ti *templateInfo) {
 	w.Header().Set("content-type", "text/html")
 	var buf bytes.Buffer
-	if err := tpl.Execute(&buf, data); err != nil {
+	if err := tpl.Execute(&buf, ti); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
