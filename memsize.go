@@ -10,72 +10,27 @@ import (
 	"unsafe"
 )
 
-// RootSet holds roots to scan.
-type RootSet struct {
-	roots map[string]reflect.Value
-}
-
-// Add adds a root to scan. The value must be a non-nil pointer to any value.
-func (g *RootSet) Add(name string, obj interface{}) {
-	if g.roots == nil {
-		g.roots = make(map[string]reflect.Value)
+// Scan traverses all objects reachable from v and counts how much memory
+// is used per type. The value must be a non-nil pointer to any value.
+func Scan(v interface{}) Sizes {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		panic("value to scan must be non-nil pointer")
 	}
-	rv := reflect.ValueOf(obj)
-	if rv.Kind() != reflect.Ptr {
-		panic("root must be pointer")
-	}
-	g.roots[name] = rv
-}
 
-// Roots returns all registered root names.
-func (g *RootSet) Roots() []string {
-	names := make([]string, 0, len(g.roots))
-	for name := range g.roots {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// Scan traverses all objects reachable from the current roots and counts how much memory
-// is used per-type and per-root.
-func (g *RootSet) Scan() Sizes {
-	return g.scan(g.roots)
-}
-
-// ScanRoot scans a single root.
-func (g *RootSet) ScanRoot(name string) Sizes {
-	singleRoot := map[string]reflect.Value{name: g.roots[name]}
-	if _, ok := g.roots[name]; !ok {
-		panic("memsize: ScanRoot called with unregistered root name")
-	}
-	return g.scan(singleRoot)
-}
-
-func (g *RootSet) scan(roots map[string]reflect.Value) Sizes {
 	stopTheWorld("memsize scan")
 	defer startTheWorld()
 
 	ctx := newContext()
-	for name, root := range roots {
-		ctx.curRoot = name
-		ctx.scan(invalidAddr, root, false)
-		ctx.s.BitmapSize = ctx.seen.size()
-		ctx.s.BitmapUtilization = ctx.seen.utilization()
-	}
+	ctx.scan(invalidAddr, rv, false)
+	ctx.s.BitmapSize = ctx.seen.size()
+	ctx.s.BitmapUtilization = ctx.seen.utilization()
 	return *ctx.s
-}
-
-// Scan is a shorthand for scanning a single unnamed root.
-func Scan(root interface{}) Sizes {
-	var g RootSet
-	g.Add("", root)
-	return g.Scan()
 }
 
 // Sizes is the result of a scan.
 type Sizes struct {
-	ByRoot map[string]uintptr
+	Total  uintptr
 	ByType map[reflect.Type]*TypeSize
 	// Internal stats (for debugging)
 	BitmapSize        uintptr
@@ -83,22 +38,12 @@ type Sizes struct {
 }
 
 type TypeSize struct {
-	Total  uintptr
-	Count  uintptr
-	ByRoot map[string]uintptr
+	Total uintptr
+	Count uintptr
 }
 
 func newSizes() *Sizes {
-	return &Sizes{ByRoot: make(map[string]uintptr), ByType: make(map[reflect.Type]*TypeSize)}
-}
-
-// Total returns the total amount of memory across all roots.
-func (s Sizes) Total() uintptr {
-	var sum uintptr
-	for _, r := range s.ByRoot {
-		sum += r
-	}
-	return sum
+	return &Sizes{ByType: make(map[reflect.Type]*TypeSize)}
 }
 
 // Report returns a human-readable report.
@@ -108,7 +53,7 @@ func (s Sizes) Report() string {
 		count uintptr
 		total uintptr
 	}
-	tab := []typLine{{"ALL", 0, s.Total()}}
+	tab := []typLine{{"ALL", 0, s.Total}}
 	for _, typ := range s.ByType {
 		tab[0].count += typ.Count
 	}
@@ -133,14 +78,13 @@ func (s Sizes) Report() string {
 }
 
 // addValue is called during scan and adds the memory of given object.
-func (s *Sizes) addValue(root string, v reflect.Value, size uintptr) {
-	s.ByRoot[root] += size
+func (s *Sizes) addValue(v reflect.Value, size uintptr) {
+	s.Total += size
 	rs := s.ByType[v.Type()]
 	if rs == nil {
-		rs = &TypeSize{ByRoot: make(map[string]uintptr)}
+		rs = new(TypeSize)
 		s.ByType[v.Type()] = rs
 	}
-	rs.ByRoot[root] += size
 	rs.Total += size
 	rs.Count++
 }
@@ -155,10 +99,8 @@ type context struct {
 	//   infinite loop for cyclic data.
 	seen     *bitmap
 	visiting map[address]reflect.Type
-
-	tc      typCache
-	s       *Sizes
-	curRoot string
+	tc       typCache
+	s        *Sizes
 }
 
 func newContext() *context {
@@ -201,7 +143,7 @@ func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintp
 	}
 	if add {
 		size += extra
-		c.s.addValue(c.curRoot, v, size)
+		c.s.addValue(v, size)
 	}
 	return extra
 }

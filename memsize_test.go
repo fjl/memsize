@@ -295,13 +295,10 @@ func TestTotal(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
-			var rs RootSet
-			rs.Add("test", test.v)
-			size := rs.Scan()
-			if size.Total() != test.want {
-				t.Errorf("total=%d, want %d", size.Total(), test.want)
+			size := Scan(test.v)
+			if size.Total != test.want {
+				t.Errorf("total=%d, want %d", size.Total, test.want)
 				t.Logf("\n%s", size.Report())
 			}
 		})
