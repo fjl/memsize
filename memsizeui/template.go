@@ -20,10 +20,10 @@ func baseInit() {
 		<meta charset="UTF-8">
 		<title>memsize</title>
 		<style>
-		 body {
+		body {
 			 font-family: sans-serif;
-		 }
-		 button, .button {
+		}
+		button, .button {
 			 display: inline-block;
 			 font-weight: bold;
 			 color: black;
@@ -34,10 +34,10 @@ func baseInit() {
 			 background-color: #eee;
 			 border: 1px solid #999;
 			 border-radius: 2pt;
-		 }
-         form.inline {
-             display: inline-block;
-         }
+		}
+		form.inline {
+			display: inline-block;
+		}
 		</style>
 	</head>
 	<body>
@@ -73,10 +73,10 @@ var rootTemplate = contentTemplate(`
 <h3>Reports</h3>
 <ul>
 	{{range .Reports}}
-	   <li><a href="{{printf "%d" | $.Link "report/"}}">{{quote .RootName}} @ {{.Date}}</a></li>
+		<li><a href="{{printf "%d" | $.Link "report/"}}">{{quote .RootName}} @ {{.Date}}</a></li>
 	{{else}}
-       No reports yet, hit a scan button to create one.
-    {{end}}
+		No reports yet, hit a scan button to create one.
+	{{end}}
 </ul>
 `)
 
