@@ -29,7 +29,10 @@ func (a address) addOffset(off uintptr) address {
 }
 
 func (a address) String() string {
-	return fmt.Sprintf("%#x", uintptr(a))
+	if uintptrBits == 32 {
+		return fmt.Sprintf("%#0.8x", uintptr(a))
+	}
+	return fmt.Sprintf("%#0.16x", uintptr(a))
 }
 
 type typCache map[reflect.Type]typInfo
