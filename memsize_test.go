@@ -22,12 +22,26 @@ type (
 		x   uint32
 		cld *structptr
 	}
+	structuint32ptr struct {
+		x *uint32
+	}
+	structmultiptr struct {
+		s1 *structptr
+		u1 *structuint32ptr
+		s2 *structptr
+		u2 *structuint32ptr
+		s3 *structptr
+		u3 *structuint32ptr
+	}
+	structarrayptr struct {
+		x *uint64
+		a [10]uint64
+	}
 	struct64array  struct{ array64 }
 	structslice    struct{ s []uint32 }
 	structstring   struct{ s string }
 	structloop     struct{ s *structloop }
 	structptrslice struct{ s *structslice }
-	structmultiptr struct{ s1, s2, s3 *structptr }
 	array64        [64]byte
 )
 
@@ -62,13 +76,30 @@ func TestTotal(t *testing.T) {
 			want: 2 * sizeofWord,
 		},
 		{
-			name: "structmultiptr",
+			name: "structmultiptr_loop",
 			v: func() *structmultiptr {
 				v1 := &structptr{x: 1}
 				v2 := &structptr{x: 2, cld: v1}
-				return &structmultiptr{v1, v1, v2}
+				return &structmultiptr{s1: v1, s2: v1, s3: v2}
 			}(),
-			want: 3*sizeofWord + 2*2*sizeofWord,
+			want: 6*sizeofWord /* structmultiptr */ + 2*2*sizeofWord, /* structptr */
+		},
+		{
+			name: "structmultiptr_interior",
+			v: func() *structmultiptr {
+				v1 := &structptr{x: 1}
+				v2 := &structptr{x: 2}
+				return &structmultiptr{
+					// s1 is scanned before u1, which has a reference to a field of s1.
+					s1: v1,
+					u1: &structuint32ptr{x: &v1.x},
+					// This one goes the other way around: u2, which has a reference to a
+					// field of s3 is scanned before s3.
+					u2: &structuint32ptr{x: &v2.x},
+					s3: v2,
+				}
+			}(),
+			want: 6*sizeofWord /* structmultiptr */ + 2*2*sizeofWord /* structptr */ + 2*sizeofWord, /* structuint32ptr */
 		},
 		{
 			name: "struct64array",

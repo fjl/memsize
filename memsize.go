@@ -90,62 +90,41 @@ func (s *Sizes) addValue(v reflect.Value, size uintptr) {
 }
 
 type context struct {
-	// We track previously seen objects to prevent infinite loops when scanning cycles, and
-	// to prevent scanning objects more than once. This is done in two ways:
-	//
-	// - seen holds memory spans that have been scanned already. It prevents
-	//   counting objects more than once.
-	// - visiting holds pointers on the scan stack. It prevents going into an
-	//   infinite loop for cyclic data.
-	seen     *bitmap
-	visiting map[address]reflect.Type
-	tc       typCache
-	s        *Sizes
+	// We track previously scanned objects to prevent infinite loops
+	// when scanning cycles, and to prevent scanning objects more than
+	// once.
+	seen *bitmap
+	tc   typCache
+	s    *Sizes
 }
 
 func newContext() *context {
-	return &context{
-		seen:     newBitmap(),
-		visiting: make(map[address]reflect.Type),
-		tc:       make(typCache),
-		s:        newSizes(),
-	}
+	return &context{seen: newBitmap(), tc: make(typCache), s: newSizes()}
 }
 
 // scan walks all objects below v, determining their size. All scan* functions return the
 // amount of 'extra' memory (e.g. slice data) that is referenced by the object.
 func (c *context) scan(addr address, v reflect.Value, add bool) (extraSize uintptr) {
-	if addr.valid() {
-		// Skip this value if it was scanned earlier.
-		if c.seen.isMarked(uintptr(addr)) {
-			return 0
-		}
-		// Also skip if it is being scanned already.
-		// Problem: when scanning structs/arrays, the first field/element has the base
-		// address and would be skipped. To fix this, we track the type for each seen
-		// object and rescan if the addr is of different type. This works because the
-		// type of the field/element can never be the same type as the containing
-		// struct/array.
-		if typ, ok := c.visiting[addr]; ok && isEqualOrPointerTo(v.Type(), typ) {
-			return 0
-		}
-		c.visiting[addr] = v.Type()
-	}
-	extra := uintptr(0)
-	if c.tc.needScan(v.Type()) {
-		extra = c.scanContent(addr, v)
-
-	}
 	size := v.Type().Size()
+	var marked uintptr
 	if addr.valid() {
-		delete(c.visiting, addr)
+		marked = c.seen.countRange(uintptr(addr), size)
+		if marked == size {
+			return 0 // Skip if we have already seen the whole object.
+		}
 		c.seen.markRange(uintptr(addr), size)
 	}
+	// fmt.Printf("%v: %v ⮑ (marked %d)\n", addr, v.Type(), marked)
+	if c.tc.needScan(v.Type()) {
+		extraSize = c.scanContent(addr, v)
+	}
+	// fmt.Printf("%v: %v %d (add %v, size %d, marked %d, extra %d)\n", addr, v.Type(), size+extraSize, add, v.Type().Size(), marked, extraSize)
 	if add {
-		size += extra
+		size -= marked
+		size += extraSize
 		c.s.addValue(v, size)
 	}
-	return extra
+	return extraSize
 }
 
 func (c *context) scanContent(addr address, v reflect.Value) uintptr {
@@ -188,7 +167,7 @@ func (c *context) scanChan(v reflect.Value) uintptr {
 		for i := uint(0); i < uint(v.Cap()); i++ {
 			addr := chanbuf(hchan, i)
 			elem := reflect.NewAt(etyp, addr).Elem()
-			extra += c.scan(address(addr), elem, false)
+			extra += c.scanContent(address(addr), elem)
 		}
 	}
 	return uintptr(v.Cap())*etyp.Size() + extra
@@ -197,8 +176,11 @@ func (c *context) scanChan(v reflect.Value) uintptr {
 func (c *context) scanStruct(base address, v reflect.Value) uintptr {
 	extra := uintptr(0)
 	for i := 0; i < v.NumField(); i++ {
-		addr := base.addOffset(v.Type().Field(i).Offset)
-		extra += c.scan(addr, v.Field(i), false)
+		f := v.Type().Field(i)
+		if c.tc.needScan(f.Type) {
+			addr := base.addOffset(f.Offset)
+			extra += c.scanContent(addr, v.Field(i))
+		}
 	}
 	return extra
 }
@@ -206,9 +188,11 @@ func (c *context) scanStruct(base address, v reflect.Value) uintptr {
 func (c *context) scanArray(addr address, v reflect.Value) uintptr {
 	esize := v.Type().Elem().Size()
 	extra := uintptr(0)
-	for i := 0; i < v.Len(); i++ {
-		extra += c.scan(addr, v.Index(i), false)
-		addr = addr.addOffset(esize)
+	if c.tc.needScan(v.Type().Elem()) {
+		for i := 0; i < v.Len(); i++ {
+			extra += c.scanContent(addr, v.Index(i))
+			addr = addr.addOffset(esize)
+		}
 	}
 	return extra
 }
@@ -221,16 +205,14 @@ func (c *context) scanSlice(v reflect.Value) uintptr {
 	blen := uintptr(slice.Len()) * esize
 	marked := c.seen.countRange(base, blen)
 	extra := blen - marked
+	c.seen.markRange(uintptr(base), blen)
 	if c.tc.needScan(slice.Type().Elem()) {
 		// Elements may contain pointers, scan them individually.
 		addr := address(base)
 		for i := 0; i < slice.Len(); i++ {
-			extra += c.scan(addr, slice.Index(i), false)
+			extra += c.scanContent(addr, slice.Index(i))
 			addr = addr.addOffset(esize)
 		}
-	} else {
-		// No pointers, just mark as seen.
-		c.seen.markRange(uintptr(base), blen)
 	}
 	return extra
 }

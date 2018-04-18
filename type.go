@@ -102,10 +102,6 @@ func isPointer(typ reflect.Type) bool {
 	}
 }
 
-func isEqualOrPointerTo(typ, other reflect.Type) bool {
-	return typ == other || typ.Kind() == reflect.Ptr && typ.Elem() == other
-}
-
 func unhandledKind(k reflect.Kind) {
 	panic("unhandled kind " + k.String())
 }
