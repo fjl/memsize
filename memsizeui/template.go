@@ -81,7 +81,7 @@ var rootTemplate = contentTemplate(`
 `)
 
 var notFoundTemplate = contentTemplate(`
-<h1>Report not found</h1>
+<h1>{{.Data}}</h1>
 {{template "rootbuttons" .}}
 `)
 
