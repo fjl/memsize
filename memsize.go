@@ -91,8 +91,7 @@ func (s *Sizes) addValue(v reflect.Value, size uintptr) {
 
 type context struct {
 	// We track previously scanned objects to prevent infinite loops
-	// when scanning cycles, and to prevent scanning objects more than
-	// once.
+	// when scanning cycles and to prevent counting objects more than once.
 	seen *bitmap
 	tc   typCache
 	s    *Sizes
@@ -188,11 +187,9 @@ func (c *context) scanStruct(base address, v reflect.Value) uintptr {
 func (c *context) scanArray(addr address, v reflect.Value) uintptr {
 	esize := v.Type().Elem().Size()
 	extra := uintptr(0)
-	if c.tc.needScan(v.Type().Elem()) {
-		for i := 0; i < v.Len(); i++ {
-			extra += c.scanContent(addr, v.Index(i))
-			addr = addr.addOffset(esize)
-		}
+	for i := 0; i < v.Len(); i++ {
+		extra += c.scanContent(addr, v.Index(i))
+		addr = addr.addOffset(esize)
 	}
 	return extra
 }
