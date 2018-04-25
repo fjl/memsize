@@ -37,6 +37,10 @@ type (
 		x *uint64
 		a [10]uint64
 	}
+	structiface struct {
+		s *struct16
+		x interface{}
+	}
 	struct64array  struct{ array64 }
 	structslice    struct{ s []uint32 }
 	structstring   struct{ s string }
@@ -166,6 +170,11 @@ func TestTotal(t *testing.T) {
 			want: sizeofMap + 3*sizeofWord /* key pointers */ + 3*16 /* keys */ + 3*8, /* values */
 		},
 		{
+			name: "map_interface",
+			v:    &map[interface{}]interface{}{"aa": uint64(1)},
+			want: sizeofMap + sizeofInterface + sizeofString + 2 /* key */ + sizeofInterface + 8, /* value */
+		},
+		{
 			name: "pointerpointer",
 			v: func() **uint64 {
 				i := uint64(0)
@@ -244,6 +253,19 @@ func TestTotal(t *testing.T) {
 			name: "interface_nil",
 			v:    &[2]interface{}{nil, nil},
 			want: 2 * sizeofInterface,
+		},
+		{
+			name: "structiface_slice",
+			v:    &structiface{x: make([]byte, 10)},
+			want: sizeofWord + sizeofInterface + sizeofSlice + 10,
+		},
+		{
+			name: "structiface_pointer",
+			v: func() *structiface {
+				s := &struct16{1, 2}
+				return &structiface{s: s, x: &s.x}
+			}(),
+			want: sizeofWord + 16 + sizeofInterface,
 		},
 		{
 			name: "empty_chan",
