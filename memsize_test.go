@@ -155,6 +155,11 @@ func TestTotal(t *testing.T) {
 			want: sizeofSlice + 3*sizeofWord + 3*16,
 		},
 		{
+			name: "map0",
+			v:    &map[uint64]uint64{},
+			want: sizeofMap,
+		},
+		{
 			name: "map3",
 			v:    &map[uint64]uint64{1: 1, 2: 2, 3: 3},
 			want: sizeofMap + 3*8 /* keys */ + 3*8, /* values */
