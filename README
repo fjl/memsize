@@ -1,10 +1,10 @@
-NOTE: As of Go 1.23, memsize no longer works because of a restriction added by
-the Go toolchain. The Go 1.23 compiler no longer allows access to runtime symbols via
-go:linkname, which prevents memsize from accessing the Stop-the-World functionality of
-the Go runtime.
+NOTE: As of Go 1.23, memsize no longer works because of a restriction added by the
+Go toolchain. The Go 1.23 compiler no longer allows access to runtime symbols via
+go:linkname, which prevents memsize from accessing the Stop-the-World
+functionality of the Go runtime.
 
-If your program depends on memsize, you can disable the restriction when building your
-program, like this:
+If your program depends on memsize, you can disable the restriction when building
+your program:
 
     go build -ldflags=-checklinkname=0
 
